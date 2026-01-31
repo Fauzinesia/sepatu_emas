@@ -251,6 +251,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
               $stmt = $pdo->prepare('UPDATE tb_pendaftaran SET id_pelatihan = ?, keterangan = ?, updated_at = NOW() WHERE id_pendaftaran = ?');
               $stmt->execute([$id_pelatihan_new, ($ket !== '' ? $ket : null), $id]);
+
+              // --- Logika Upload Berkas (Admin) ---
+              $uploadDir = __DIR__ . '/../../uploads/pendaftaran';
+              if (!is_dir($uploadDir)) @mkdir($uploadDir, 0775, true);
+              $maxSize = 2 * 1024 * 1024; // 2MB
+              $forbidden = ['php', 'php3', 'php4', 'php5', 'phtml', 'exe', 'bat', 'sh', 'cmd', 'js', 'html', 'htm', 'jar', 'vbs'];
+              $fields = ['file_ktp', 'file_ijazah', 'file_kartu_pencari_kerja'];
+              $saved = [];
+              foreach ($fields as $f) {
+                if (!isset($_FILES[$f]) || $_FILES[$f]['error'] === UPLOAD_ERR_NO_FILE) continue;
+                if ($_FILES[$f]['error'] === UPLOAD_ERR_OK) {
+                  if ($_FILES[$f]['size'] > $maxSize) continue;
+                  $ext = strtolower(pathinfo($_FILES[$f]['name'], PATHINFO_EXTENSION));
+                  if (in_array($ext, $forbidden, true)) continue;
+                  $fname = 'reg-' . $id . '-' . $f . '-' . bin2hex(random_bytes(6)) . '.' . ($ext ?: 'dat');
+                  if (move_uploaded_file($_FILES[$f]['tmp_name'], $uploadDir . '/' . $fname)) {
+                    $saved[$f] = 'uploads/pendaftaran/' . $fname;
+                  }
+                }
+              }
+              if (!empty($saved)) {
+                $setSql = []; $prms = [':id' => $id];
+                foreach ($saved as $col => $path) {
+                  $setSql[] = "$col = :$col";
+                  $prms[":$col"] = $path;
+                }
+                $upd = $pdo->prepare("UPDATE tb_pendaftaran SET " . implode(', ', $setSql) . " WHERE id_pendaftaran = :id");
+                $upd->execute($prms);
+              }
+              // --- End Logika Upload ---
+
               $flash_success = 'Pendaftaran berhasil diperbarui.';
             }
           }
@@ -267,10 +298,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $stf = $pdo->prepare('SELECT status, file_ktp, file_ijazah, file_kartu_pencari_kerja FROM tb_pendaftaran WHERE id_pendaftaran = ?');
           $stf->execute([$id]);
           $filesRow = $stf->fetch(PDO::FETCH_ASSOC) ?: [];
-          $current = strtolower($filesRow['status'] ?? '');
-          if ($current !== 'menunggu') {
-            $flash_error = 'Tidak boleh menghapus pendaftaran dengan status final.';
-          } else {
+          // Hapus batasan status final agar admin bisa menghapus data kapan saja
+          // if ($current !== 'menunggu') { ... }
+          
             $del = $pdo->prepare('DELETE FROM tb_pendaftaran WHERE id_pendaftaran = ?');
             $del->execute([$id]);
 
@@ -282,7 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               }
             }
             $flash_success = 'Pendaftaran berhasil dihapus.';
-          }
+          // }
         } catch (Throwable $e) {
           $flash_error = 'Gagal menghapus pendaftaran.';
         }
@@ -322,6 +352,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $ins = $pdo->prepare('INSERT INTO tb_pendaftaran (id_user, id_pelatihan, status, tanggal_daftar, keterangan) VALUES (?,?,?,?,?)');
           $ins->execute([$id_user, $id_pelatihan, $stat, date('Y-m-d'), ($ket !== '' ? $ket : null)]);
           $lastId = (int)$pdo->lastInsertId();
+
+          // --- Logika Upload Berkas (Admin) ---
+          $uploadDir = __DIR__ . '/../../uploads/pendaftaran';
+          if (!is_dir($uploadDir)) @mkdir($uploadDir, 0775, true);
+          $maxSize = 2 * 1024 * 1024;
+          $forbidden = ['php', 'php3', 'php4', 'php5', 'phtml', 'exe', 'bat', 'sh', 'cmd', 'js', 'html', 'htm', 'jar', 'vbs'];
+          $fields = ['file_ktp', 'file_ijazah', 'file_kartu_pencari_kerja'];
+          $saved = [];
+          foreach ($fields as $f) {
+            if (!isset($_FILES[$f]) || $_FILES[$f]['error'] === UPLOAD_ERR_NO_FILE) continue;
+            if ($_FILES[$f]['error'] === UPLOAD_ERR_OK) {
+              if ($_FILES[$f]['size'] > $maxSize) continue;
+              $ext = strtolower(pathinfo($_FILES[$f]['name'], PATHINFO_EXTENSION));
+              if (in_array($ext, $forbidden, true)) continue;
+              $fname = 'reg-' . $lastId . '-' . $f . '-' . bin2hex(random_bytes(6)) . '.' . ($ext ?: 'dat');
+              if (move_uploaded_file($_FILES[$f]['tmp_name'], $uploadDir . '/' . $fname)) {
+                $saved[$f] = 'uploads/pendaftaran/' . $fname;
+              }
+            }
+          }
+          if (!empty($saved)) {
+            $setSql = []; $prms = [':id' => $lastId];
+            foreach ($saved as $col => $path) {
+              $setSql[] = "$col = :$col";
+              $prms[":$col"] = $path;
+            }
+            $upd = $pdo->prepare("UPDATE tb_pendaftaran SET " . implode(', ', $setSql) . " WHERE id_pendaftaran = :id");
+            $upd->execute($prms);
+          }
+          // --- End Logika Upload ---
+
           // Generate no_induk_pendaftaran jika kolom tersedia
           $noInduk = 'NIP-' . date('Y') . '/' . str_pad((string)$lastId, 6, '0', STR_PAD_LEFT);
           try {
@@ -515,7 +576,7 @@ include_once __DIR__ . '/../../includes/sidebar.php';
                             <i class="ti ti-edit"></i> Edit
                           </button>
                         <?php } ?>
-                        <button type="button" class="btn btn-outline-danger btn-sm ms-1 btn-delete-reg" <?php echo $status !== 'menunggu' ? 'disabled' : ''; ?>
+                        <button type="button" class="btn btn-outline-danger btn-sm ms-1 btn-delete-reg"
                           data-id="<?php echo $id; ?>"
                           data-label="<?php echo htmlspecialchars($peserta . ' — ' . $pelatihan); ?>">
                           <i class="ti ti-trash"></i> Hapus
@@ -673,7 +734,7 @@ include_once __DIR__ . '/../../includes/sidebar.php';
           <h5 class="modal-title">Edit Pendaftaran</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
           <input type="hidden" name="action" value="edit">
           <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
           <input type="hidden" name="id_pendaftaran" id="edit_reg_id">
@@ -691,6 +752,19 @@ include_once __DIR__ . '/../../includes/sidebar.php';
               <div class="col-md-6">
                 <label class="form-label">Keterangan (opsional)</label>
                 <input type="text" name="keterangan" id="edit_reg_ket" class="form-control">
+              </div>
+              <div class="col-12"><hr></div>
+              <div class="col-md-4">
+                <label class="form-label small fw-bold">Update KTP</label>
+                <input type="file" name="file_ktp" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-bold">Update Ijazah</label>
+                <input type="file" name="file_ijazah" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-bold">Update Kartu Pencari Kerja</label>
+                <input type="file" name="file_kartu_pencari_kerja" class="form-control form-control-sm">
               </div>
             </div>
           </div>
@@ -711,7 +785,7 @@ include_once __DIR__ . '/../../includes/sidebar.php';
           <h5 class="modal-title">Tambah Pendaftaran</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
           <input type="hidden" name="action" value="create">
           <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
           <div class="modal-body">
@@ -749,6 +823,19 @@ include_once __DIR__ . '/../../includes/sidebar.php';
               <div class="col-12">
                 <label class="form-label">No Induk Pendaftaran</label>
                 <input type="text" class="form-control" value="(dibuat otomatis setelah simpan)" readonly>
+              </div>
+              <div class="col-12"><hr></div>
+              <div class="col-md-4">
+                <label class="form-label small fw-bold">File KTP</label>
+                <input type="file" name="file_ktp" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-bold">File Ijazah</label>
+                <input type="file" name="file_ijazah" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-bold">File Kartu Pencari Kerja</label>
+                <input type="file" name="file_kartu_pencari_kerja" class="form-control form-control-sm">
               </div>
             </div>
           </div>

@@ -25,6 +25,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'dafta
     if ($uid <= 0 || $id_pelatihan <= 0) {
       throw new RuntimeException('Data pendaftaran tidak valid.');
     }
+    
+    // Cek apakah user sedang mendaftar/mengikuti pelatihan lain (status menunggu/diterima)
+    $cekAktif = $pdo->prepare("SELECT p.status, pl.nama_pelatihan 
+                               FROM tb_pendaftaran p 
+                               JOIN tb_pelatihan pl ON p.id_pelatihan = pl.id_pelatihan 
+                               WHERE p.id_user = ? AND p.status IN ('menunggu','diterima') AND p.id_pelatihan != ? 
+                               LIMIT 1");
+    $cekAktif->execute([$uid, $id_pelatihan]);
+    $existing = $cekAktif->fetch(PDO::FETCH_ASSOC);
+    if ($existing) {
+      throw new RuntimeException('Anda sedang terdaftar di pelatihan "' . $existing['nama_pelatihan'] . '" (' . ucfirst($existing['status']) . '). Tidak dapat mendaftar pelatihan lain.');
+    }
+
     $cekDup = $pdo->prepare('SELECT COUNT(*) FROM tb_pendaftaran WHERE id_user = ? AND id_pelatihan = ?');
     $cekDup->execute([$uid, $id_pelatihan]);
     if ((int)$cekDup->fetchColumn() > 0) {
@@ -106,6 +119,15 @@ try {
     $myRegs[(int)$r['id_pelatihan']] = true;
   }
 } catch (Throwable $e) {}
+
+// Cek apakah punya pendaftaran aktif (menunggu/diterima) di pelatihan mana pun
+$hasActiveRegistration = false;
+try {
+  $chk = $pdo->prepare("SELECT COUNT(*) FROM tb_pendaftaran WHERE id_user = ? AND status IN ('menunggu','diterima')");
+  $chk->execute([$_SESSION['auth']['id_user'] ?? 0]);
+  $hasActiveRegistration = ((int)$chk->fetchColumn() > 0);
+} catch (Throwable $e) {}
+
 function excerpt_text(string $text, int $max = 120): string {
   $text = trim(strip_tags($text));
   if (mb_strlen($text) <= $max) return $text;
@@ -174,6 +196,9 @@ function format_date_id(?string $date): string {
             $ku = (int)($p['kuota'] ?? 0);
             $full = ($ku > 0 && $cnt >= $ku);
             $already = !empty($myRegs[$pid]);
+            // Jika sudah terdaftar di SINI, abaikan flag global hasActiveRegistration (karena 'active' itu ya ini)
+            // Tapi jika belum terdaftar di SINI, dan punya active registration di tempat lain -> block
+            $blockedByOther = (!$already && $hasActiveRegistration);
           ?>
           <div class="col-md-4 pelatihan-item">
             <div class="card h-100">
@@ -209,8 +234,8 @@ function format_date_id(?string $date): string {
                     <input type="hidden" name="action" value="daftar_pelatihan">
                     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf); ?>">
                     <input type="hidden" name="id_pelatihan" value="<?php echo $pid; ?>">
-                    <button type="submit" class="btn btn-primary btn-sm" <?php echo ($full || $already) ? 'disabled' : ''; ?>>
-                      <?php echo $already ? 'Sudah Terdaftar' : ($full ? 'Kuota Penuh' : 'Daftar'); ?>
+                    <button type="submit" class="btn btn-primary btn-sm" <?php echo ($full || $already || $blockedByOther) ? 'disabled' : ''; ?>>
+                      <?php echo $already ? 'Sudah Terdaftar' : ($blockedByOther ? 'Sedang Mendaftar Lain' : ($full ? 'Kuota Penuh' : 'Daftar')); ?>
                     </button>
                   </form>
                 </div>

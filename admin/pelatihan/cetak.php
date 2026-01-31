@@ -11,10 +11,36 @@ if (strtolower($_SESSION['auth']['role'] ?? '') !== 'admin') {
 
 require_once __DIR__ . '/../../config/koneksi.php';
 
+// Ambil parameter filter
+$filter_status = isset($_GET['filter_status']) ? strtolower(trim($_GET['filter_status'])) : '';
+$filter_kategori = isset($_GET['filter_kategori']) ? strtoupper(trim($_GET['filter_kategori'])) : '';
+$filter_nama = isset($_GET['filter_nama']) ? trim($_GET['filter_nama']) : '';
+
+// Build WHERE clause for Pelatihan
+$whereClauses = [];
+$params = [];
+if ($filter_status !== '') {
+    $whereClauses[] = "status = :status";
+    $params[':status'] = $filter_status;
+}
+if ($filter_kategori !== '') {
+    $whereClauses[] = "kategori = :kategori";
+    $params[':kategori'] = $filter_kategori;
+}
+if ($filter_nama !== '') {
+    $whereClauses[] = "nama_pelatihan = :nama";
+    $params[':nama'] = $filter_nama;
+}
+$whereSql = "";
+if (!empty($whereClauses)) {
+    $whereSql = "WHERE " . implode(" AND ", $whereClauses);
+}
+
 // Ambil data pelatihan
 $pelatihans = [];
 try {
-  $stmt = $pdo->query("SELECT id_pelatihan, nama_pelatihan, status, tanggal_mulai, tanggal_selesai, kategori, lokasi FROM tb_pelatihan ORDER BY id_pelatihan DESC");
+  $stmt = $pdo->prepare("SELECT id_pelatihan, nama_pelatihan, status, tanggal_mulai, tanggal_selesai, kategori, lokasi FROM tb_pelatihan $whereSql ORDER BY id_pelatihan DESC");
+  $stmt->execute($params);
   $pelatihans = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
   $pelatihans = [];
@@ -23,13 +49,34 @@ try {
 // Ambil data peserta per pelatihan
 $pendaftarans = [];
 try {
+  // Adapt WHERE clause for alias 'pe'
+  $whereClausesPe = [];
+  $paramsPe = [];
+  if ($filter_status !== '') {
+      $whereClausesPe[] = "pe.status = :status";
+      $paramsPe[':status'] = $filter_status;
+  }
+  if ($filter_kategori !== '') {
+      $whereClausesPe[] = "pe.kategori = :kategori";
+      $paramsPe[':kategori'] = $filter_kategori;
+  }
+  if ($filter_nama !== '') {
+      $whereClausesPe[] = "pe.nama_pelatihan = :nama";
+      $paramsPe[':nama'] = $filter_nama;
+  }
+  $whereSqlPe = "";
+  if (!empty($whereClausesPe)) {
+      $whereSqlPe = "WHERE " . implode(" AND ", $whereClausesPe);
+  }
+
   $sql = "SELECT pe.nama_pelatihan, u.nama_lengkap, u.username, p.tanggal_daftar, p.status
           FROM tb_pendaftaran p
           JOIN tb_user u ON p.id_user = u.id_user
           JOIN tb_pelatihan pe ON p.id_pelatihan = pe.id_pelatihan
+          $whereSqlPe
           ORDER BY pe.nama_pelatihan ASC, p.tanggal_daftar ASC";
   $st = $pdo->prepare($sql);
-  $st->execute();
+  $st->execute($paramsPe);
   $pendaftarans = $st->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
   $pendaftarans = [];
@@ -129,6 +176,16 @@ $printedBy = htmlspecialchars($_SESSION['auth']['username'] ?? 'admin');
   <div class="title">Data Pelatihan</div>
   <div class="meta">
     <div>Dicetak: <?php echo htmlspecialchars($printedAt); ?></div>
+    <div>
+        <?php 
+        $info = [];
+        if ($filter_status) $info[] = 'Status: ' . ucfirst($filter_status);
+        if ($filter_kategori) $info[] = 'Kategori: ' . $filter_kategori;
+        if ($filter_nama) $info[] = 'Pencarian: ' . htmlspecialchars($filter_nama);
+        if (empty($info)) $info[] = 'Semua Data';
+        echo implode(' | ', $info);
+        ?>
+    </div>
     <div>Petugas: <?php echo $printedBy; ?></div>
   </div>
 

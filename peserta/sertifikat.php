@@ -80,6 +80,19 @@ try {
       <?php include_once __DIR__ . '/../includes/navbar.php'; ?>
 
       <div class="container-fluid">
+        <?php if (isset($_GET['need_tracer']) && $_GET['need_tracer'] == '1'): ?>
+          <div class="alert alert-warning alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+            <div class="d-flex">
+              <i class="ti ti-alert-circle fs-6 me-3 mt-1"></i>
+              <div>
+                <h6 class="alert-heading fw-bold mb-1">Tracer Study Diperlukan</h6>
+                <p class="mb-0">Sebagai bagian dari administrasi, Anda diwajibkan untuk mengisi kuesioner Tracer Study sebelum dapat mencetak atau mengunduh sertifikat pelatihan.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        <?php endif; ?>
+
         <div class="row">
           <div class="col-12">
             <div class="card">
@@ -138,13 +151,7 @@ try {
     </div>
   </div>
 
-  <?php if (isset($_GET['need_tracer']) && $_GET['need_tracer'] == '1') { ?>
-    <div class="container mt-3">
-      <div class="alert alert-warning" role="alert">
-        Sebelum mencetak sertifikat, mohon isi Tracer Study terlebih dahulu.
-      </div>
-    </div>
-  <?php } ?>
+
 
   <!-- Modal Tracer Study -->
   <div class="modal fade" id="modalTracer" tabindex="-1" aria-labelledby="modalTracerLabel" aria-hidden="true">
@@ -154,11 +161,24 @@ try {
           <h5 class="modal-title" id="modalTracerLabel">Konfirmasi Tracer Study</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <p class="mb-2">Sebelum mencetak sertifikat, Anda wajib mengisi formulir Tracer Study.</p>
-          <p class="small text-muted">Klik tombol di bawah untuk membuka formulir pada tab baru, isi hingga selesai, lalu kembali ke halaman ini dan tekan "Saya sudah mengisi".</p>
-          <a href="https://docs.google.com/forms/d/e/1FAIpQLSd-y1SdlZ_B71ru3jFldl-YaE2wNVrmR1bMx_CMEcmal2ehAg/viewform" target="_blank" rel="noopener" class="btn btn-outline-primary">
-            Buka Formulir Tracer Study
+        <div class="modal-body text-center p-4">
+          <div class="mb-3">
+            <i class="ti ti-school text-warning" style="font-size: 4rem;"></i>
+          </div>
+          <h5 class="fw-bold mb-3">Lengkapi Tracer Study</h5>
+          <p class="text-muted">Partisipasi Anda dalam Tracer Study sangat membantu kami dalam meningkatkan kualitas pelatihan di masa mendatang.</p>
+          
+          <div class="bg-light p-3 rounded-3 mb-3 text-start">
+            <h6 class="fw-bold mb-1 small text-dark uppercase">Langkah-langkah:</h6>
+            <ol class="small text-muted mb-0 ps-3">
+              <li>Klik tombol <strong>"Buka Formulir"</strong> di bawah.</li>
+              <li>Isi formulir pada tab baru hingga selesai.</li>
+              <li>Kembali ke halaman ini dan klik <strong>"Saya Sudah Mengisi"</strong>.</li>
+            </ol>
+          </div>
+
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSd-y1SdlZ_B71ru3jFldl-YaE2wNVrmR1bMx_CMEcmal2ehAg/viewform" target="_blank" rel="noopener" class="btn btn-primary w-100 py-2">
+            <i class="ti ti-external-link me-1"></i> Buka Formulir Tracer Study
           </a>
         </div>
         <div class="modal-footer">

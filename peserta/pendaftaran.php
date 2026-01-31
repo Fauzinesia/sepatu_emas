@@ -97,13 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       @mkdir($uploadDir, 0775, true);
     }
 
-    $allowed = [
-      'image/jpeg',
-      'image/png',
-      'application/pdf',
-      'image/jpg'
-    ];
     $maxSize = 2 * 1024 * 1024; // 2MB
+    
+    // Ekstensi berbahaya yang dilarang (Blacklist)
+    $forbidden = ['php', 'php3', 'php4', 'php5', 'phtml', 'exe', 'bat', 'sh', 'cmd', 'js', 'html', 'htm', 'jar', 'vbs'];
 
     $fields = ['file_ktp', 'file_ijazah', 'file_kartu_pencari_kerja'];
     $saved = [];
@@ -115,15 +112,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
       if ($err !== UPLOAD_ERR_OK) {
         throw new RuntimeException('Gagal mengunggah ' . $f . '.');
       }
-      $type = mime_content_type($_FILES[$f]['tmp_name']);
+      
       $size = (int) $_FILES[$f]['size'];
       if ($size > $maxSize) {
         throw new RuntimeException('Ukuran berkas ' . $f . ' melebihi 2MB.');
       }
-      if (!in_array($type, $allowed, true)) {
-        throw new RuntimeException('Tipe berkas ' . $f . ' tidak diizinkan.');
+
+      $rawExt = pathinfo($_FILES[$f]['name'], PATHINFO_EXTENSION);
+      $ext = strtolower($rawExt ?: '');
+      
+      // Cek blacklist ekstensi
+      if (in_array($ext, $forbidden, true)) {
+        throw new RuntimeException('Tipe berkas ' . $f . ' tidak aman dan tidak diizinkan.');
       }
-      $ext = pathinfo($_FILES[$f]['name'], PATHINFO_EXTENSION);
       $fname = 'reg-' . $id_pendaftaran . '-' . $f . '-' . bin2hex(random_bytes(6)) . '.' . strtolower($ext ?: 'dat');
       $dest = $uploadDir . '/' . $fname;
       if (!move_uploaded_file($_FILES[$f]['tmp_name'], $dest)) {
@@ -298,22 +299,20 @@ try {
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf); ?>" />
                         <input type="hidden" name="id_pendaftaran" id="upload_id_pendaftaran" />
                         <div class="modal-body">
-                          <p class="text-muted">Pilih berkas yang ingin Anda unggah atau perbarui. Format yang
-                            diizinkan: PDF/JPG/PNG untuk KTP, Ijazah, dan Kartu Pencari Kerja. Maksimal 2MB per berkas.
+                          <p class="text-muted">Pilih berkas yang ingin Anda unggah atau perbarui. Format bebas (Dokumen/Gambar, kecuali file program/eksekusi). Maksimal 2MB per berkas.
                           </p>
                           <div class="row g-3">
                             <div class="col-md-12">
-                              <label class="form-label">KTP (PDF/JPG/PNG)</label>
-                              <input type="file" name="file_ktp" accept=".pdf,image/*" class="form-control" />
+                              <label class="form-label">KTP</label>
+                              <input type="file" name="file_ktp" class="form-control" />
                             </div>
                             <div class="col-md-12">
-                              <label class="form-label">Ijazah (PDF/JPG/PNG)</label>
-                              <input type="file" name="file_ijazah" accept=".pdf,image/*" class="form-control" />
+                              <label class="form-label">Ijazah</label>
+                              <input type="file" name="file_ijazah" class="form-control" />
                             </div>
                             <div class="col-md-12">
-                              <label class="form-label">Kartu Pencari Kerja (PDF/JPG/PNG)</label>
-                              <input type="file" name="file_kartu_pencari_kerja" accept=".pdf,image/*"
-                                class="form-control" />
+                              <label class="form-label">Kartu Pencari Kerja</label>
+                              <input type="file" name="file_kartu_pencari_kerja" class="form-control" />
                             </div>
                           </div>
                         </div>

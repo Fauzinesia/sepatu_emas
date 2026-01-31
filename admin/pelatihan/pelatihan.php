@@ -26,6 +26,15 @@ try {
   $bidang_list = [];
 }
 
+// Ambil daftar nama pelatihan untuk filter dropdown
+$nama_pelatihan_list = [];
+try {
+  $stmtNama = $pdo->query("SELECT DISTINCT nama_pelatihan FROM tb_pelatihan ORDER BY nama_pelatihan ASC");
+  $nama_pelatihan_list = $stmtNama->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {
+  $nama_pelatihan_list = [];
+}
+
 // Helper upload foto ke assets/images/products
 function upload_foto_product(array $file): ?string {
   if (empty($file['name']) || $file['error'] !== UPLOAD_ERR_OK) return null;
@@ -130,9 +139,48 @@ $totalRows = 0;
 $totalPages = 0;
 $offset = 0;
 
+// Filter Parameters
+$filter_status = isset($_GET['filter_status']) ? strtolower(trim($_GET['filter_status'])) : '';
+$filter_kategori = isset($_GET['filter_kategori']) ? strtoupper(trim($_GET['filter_kategori'])) : '';
+$filter_nama = isset($_GET['filter_nama']) ? trim($_GET['filter_nama']) : '';
+
 try {
+  // Build WHERE clause
+  $whereClauses = [];
+  $params = [];
+  
+  if ($filter_status !== '') {
+    $whereClauses[] = "status = :status";
+    $params[':status'] = $filter_status;
+  }
+  
+  if ($filter_kategori !== '') {
+    $whereClauses[] = "kategori = :kategori";
+    $params[':kategori'] = $filter_kategori;
+  }
+
+  if ($filter_nama !== '') {
+    // Gunakan pencarian eksak jika dari dropdown, atau LIKE jika diinginkan
+    // Karena ini dropdown, sebaiknya eksak atau LIKE 'string' tanpa wildcard jika stringnya lengkap
+    // Tapi untuk amannya (jika ada spasi dsb), kita pakai LIKE dengan parameter saja, 
+    // atau = jika kita yakin stringnya sama persis.
+    // Mari gunakan LIKE tanpa wildcard %, atau =. Kita coba = agar presisi.
+    $whereClauses[] = "nama_pelatihan = :nama";
+    $params[':nama'] = $filter_nama;
+  }
+  
+  $whereSql = "";
+  if (!empty($whereClauses)) {
+    $whereSql = "WHERE " . implode(" AND ", $whereClauses);
+  }
+
   // Hitung total baris
-  $countStmt = $pdo->query("SELECT COUNT(*) FROM tb_pelatihan");
+  $countSql = "SELECT COUNT(*) FROM tb_pelatihan $whereSql";
+  $countStmt = $pdo->prepare($countSql);
+  foreach ($params as $key => $val) {
+    $countStmt->bindValue($key, $val);
+  }
+  $countStmt->execute();
   $totalRows = (int)$countStmt->fetchColumn();
 
   $totalPages = ceil($totalRows / $perPage);
@@ -140,11 +188,17 @@ try {
   
   $offset = ($page - 1) * $perPage;
 
-  $stmt = $pdo->prepare("SELECT t.id_pelatihan, t.id_bidang, b.nama_bidang, t.nama_pelatihan, t.nama_instruktur, t.deskripsi, t.tanggal_mulai, t.tanggal_selesai, t.kategori, t.lokasi, t.foto, t.status
-                       FROM tb_pelatihan t
-                       LEFT JOIN tb_bidang b ON b.id_bidang = t.id_bidang
-                       ORDER BY t.id_pelatihan DESC
-                       LIMIT :limit OFFSET :offset");
+  $sql = "SELECT t.id_pelatihan, t.id_bidang, b.nama_bidang, t.nama_pelatihan, t.nama_instruktur, t.deskripsi, t.tanggal_mulai, t.tanggal_selesai, t.kategori, t.lokasi, t.foto, t.status
+          FROM tb_pelatihan t
+          LEFT JOIN tb_bidang b ON b.id_bidang = t.id_bidang
+          $whereSql
+          ORDER BY t.id_pelatihan DESC
+          LIMIT :limit OFFSET :offset";
+          
+  $stmt = $pdo->prepare($sql);
+  foreach ($params as $key => $val) {
+    $stmt->bindValue($key, $val);
+  }
   $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
   $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
   $stmt->execute();
@@ -184,7 +238,7 @@ include_once __DIR__ . '/../../includes/sidebar.php';
           <h5 class="card-title mb-0 fw-semibold">Pelatihan</h5>
           <div class="d-flex gap-2">
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCreate"><i class="ti ti-notebook me-1"></i> Tambah</button>
-            <button id="btnPrint" class="btn btn-outline-secondary"><i class="ti ti-printer me-1"></i> Cetak</button>
+            <a href="cetak.php?filter_status=<?php echo urlencode($filter_status); ?>&filter_kategori=<?php echo urlencode($filter_kategori); ?>&filter_nama=<?php echo urlencode($filter_nama); ?>" target="_blank" class="btn btn-outline-secondary"><i class="ti ti-printer me-1"></i> Cetak</a>
           </div>
         </div>
 
@@ -239,13 +293,36 @@ include_once __DIR__ . '/../../includes/sidebar.php';
 
         <div class="card">
           <div class="card-body">
-            <div class="d-sm-flex d-block align-items-center justify-content-between mb-3">
-              <div class="mb-2 mb-sm-0">
-              </div>
-              <div class="input-group" style="max-width: 320px;">
-                <span class="input-group-text"><i class="ti ti-search"></i></span>
-                <input type="text" id="searchInput" class="form-control" placeholder="Cari nama atau status pelatihan...">
-              </div>
+            <div class="d-block mb-3">
+              <form method="get" class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex gap-2">
+                  <!-- Status Filter -->
+                  <select name="filter_status" class="form-select" style="width: auto;" onchange="this.form.submit()">
+                      <option value="">Semua Status</option>
+                      <option value="aktif" <?php echo $filter_status === 'aktif' ? 'selected' : ''; ?>>Aktif</option>
+                      <option value="nonaktif" <?php echo $filter_status === 'nonaktif' ? 'selected' : ''; ?>>Nonaktif</option>
+                  </select>
+                  
+                  <!-- Kategori Filter -->
+                  <select name="filter_kategori" class="form-select" style="width: auto;" onchange="this.form.submit()">
+                      <option value="">Semua Kategori</option>
+                      <option value="APBN" <?php echo $filter_kategori === 'APBN' ? 'selected' : ''; ?>>APBN</option>
+                      <option value="APBD" <?php echo $filter_kategori === 'APBD' ? 'selected' : ''; ?>>APBD</option>
+                  </select>
+
+                  <!-- Nama Pelatihan Filter (Dropdown) -->
+                  <select name="filter_nama" class="form-select" style="width: auto; max-width: 300px;" onchange="this.form.submit()">
+                      <option value="">Semua Nama Pelatihan</option>
+                      <?php foreach ($nama_pelatihan_list as $nm): ?>
+                        <option value="<?php echo htmlspecialchars($nm); ?>" <?php echo $filter_nama === $nm ? 'selected' : ''; ?>>
+                          <?php echo htmlspecialchars($nm); ?>
+                        </option>
+                      <?php endforeach; ?>
+                  </select>
+                </div>
+                
+                <!-- Hapus search input lama jika sudah diganti dropdown -->
+              </form>
             </div>
             <div class="table-responsive">
               <table class="table align-middle text-nowrap" id="pelatihanTable">
@@ -318,7 +395,9 @@ include_once __DIR__ . '/../../includes/sidebar.php';
             </div>
 
             <!-- Pagination -->
-            <?php if ($totalRows > 0): ?>
+            <?php if ($totalRows > 0): 
+              $filterQuery = '&filter_status=' . urlencode($filter_status) . '&filter_kategori=' . urlencode($filter_kategori) . '&filter_nama=' . urlencode($filter_nama);
+            ?>
             <div class="d-flex align-items-center justify-content-between mt-3">
               <div class="text-muted small">
                 Menampilkan <?php echo $offset + 1; ?>–<?php echo min($offset + $perPage, $totalRows); ?> dari <?php echo $totalRows; ?> data
@@ -326,7 +405,7 @@ include_once __DIR__ . '/../../includes/sidebar.php';
               <nav>
                 <ul class="pagination pagination-sm mb-0">
                   <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="?page=<?php echo $page - 1; ?>">Prev</a>
+                    <a class="page-link" href="?page=<?php echo $page - 1; ?><?php echo $filterQuery; ?>">Prev</a>
                   </li>
                   <?php
                     $maxPagesToShow = 5;
@@ -337,11 +416,11 @@ include_once __DIR__ . '/../../includes/sidebar.php';
                     }
                     for ($p = $startPage; $p <= $endPage; $p++) {
                       $active = $p === $page ? 'active' : '';
-                      echo '<li class="page-item ' . $active . '"><a class="page-link" href="?page=' . $p . '">' . $p . '</a></li>';
+                      echo '<li class="page-item ' . $active . '"><a class="page-link" href="?page=' . $p . $filterQuery . '">' . $p . '</a></li>';
                     }
                   ?>
                   <li class="page-item <?php echo $page >= $totalPages ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="?page=<?php echo $page + 1; ?>">Next</a>
+                    <a class="page-link" href="?page=<?php echo $page + 1; ?><?php echo $filterQuery; ?>">Next</a>
                   </li>
                 </ul>
               </nav>
@@ -541,11 +620,6 @@ include_once __DIR__ . '/../../includes/sidebar.php';
     </div>
 <script>
   (function(){
-    // Cetak dialihkan ke halaman khusus cetak.php
-    document.getElementById('btnPrint')?.addEventListener('click', function(){
-      window.open('cetak.php', '_blank');
-    });
-
     // Filter pencarian sederhana
     const searchInput = document.getElementById('searchInput');
     const rows = document.querySelectorAll('#pelatihanTable tbody tr');

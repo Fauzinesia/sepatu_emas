@@ -67,10 +67,40 @@ $incomplete = array_filter($myRegs, fn($r) =>
   && $r['status'] === 'menunggu'
 );
 if (count($incomplete) > 0) {
+  $names = array_map(fn($r) => $r['nama_pelatihan'], $incomplete);
+  $namesStr = implode(', ', $names);
   $alerts[] = [
-    'type' => 'warning',
-    'icon' => 'alert-triangle',
-    'message' => 'Anda memiliki <strong>'.count($incomplete).' pendaftaran</strong> dengan berkas belum lengkap. <a href="pendaftaran.php" class="alert-link">Lengkapi sekarang</a>.'
+    'type' => 'danger',
+    'icon' => 'alert-circle',
+    'message' => '<strong>Perhatian!</strong> Anda belum melengkapi berkas untuk pelatihan: <strong>'.htmlspecialchars($namesStr).'</strong>. <br>Harap segera melengkapi berkas agar pendaftaran dapat diverifikasi. <a href="pendaftaran.php" class="btn btn-sm btn-light text-danger fw-bold ms-2">Lengkapi Sekarang</a>'
+  ];
+}
+
+$pending = array_filter($myRegs, fn($r) => 
+  $r['status'] === 'menunggu' &&
+  (count(array_filter([$r['file_ktp'], $r['file_ijazah'], $r['file_kartu_pencari_kerja']])) >= 3)
+);
+if (count($pending) > 0) {
+  $names = array_map(fn($r) => $r['nama_pelatihan'], $pending);
+  $namesStr = implode(', ', $names);
+  $alerts[] = [
+    'type' => 'info',
+    'icon' => 'clock',
+    'message' => '<strong>Menunggu Verifikasi.</strong> Pendaftaran Anda untuk <strong>'.htmlspecialchars($namesStr).'</strong> sedang diverifikasi oleh admin. Mohon ditunggu.'
+  ];
+}
+
+$accepted = array_filter($myRegs, fn($r) => 
+  $r['status'] === 'diterima' && 
+  empty($r['status_kelulusan'])
+);
+if (count($accepted) > 0) {
+  $names = array_map(fn($r) => $r['nama_pelatihan'], $accepted);
+  $namesStr = implode(', ', $names);
+  $alerts[] = [
+    'type' => 'primary',
+    'icon' => 'check',
+    'message' => '<strong>Status Diterima!</strong> Pendaftaran Anda DITERIMA pada pelatihan: <strong>'.htmlspecialchars($namesStr).'</strong>. Silakan pantau jadwal pelatihan.'
   ];
 }
 
@@ -83,15 +113,46 @@ if (count($rejected) > 0) {
   ];
 }
 
+$failed = array_filter($myRegs, fn($r) => 
+  !empty($r['status_kelulusan']) && 
+  strtolower($r['status_kelulusan']) !== 'kompeten'
+);
+if (count($failed) > 0) {
+  $names = array_map(fn($r) => $r['nama_pelatihan'], $failed);
+  $namesStr = implode(', ', $names);
+  $alerts[] = [
+    'type' => 'warning',
+    'icon' => 'alert-triangle',
+    'message' => '<strong>Mohon Maaf.</strong> Anda dinyatakan <strong>TIDAK KOMPETEN</strong> pada pelatihan: <strong>'.htmlspecialchars($namesStr).'</strong>. Tetap semangat!'
+  ];
+}
+
+$passedNoCert = array_filter($myRegs, fn($r) => 
+  !empty($r['status_kelulusan']) && 
+  strtolower($r['status_kelulusan']) === 'kompeten' &&
+  empty($r['id_sertifikat'])
+);
+if (count($passedNoCert) > 0) {
+  $names = array_map(fn($r) => $r['nama_pelatihan'], $passedNoCert);
+  $namesStr = implode(', ', $names);
+  $alerts[] = [
+    'type' => 'success',
+    'icon' => 'award',
+    'message' => '<strong>Selamat!</strong> Anda dinyatakan <strong>KOMPETEN</strong> pada pelatihan: <strong>'.htmlspecialchars($namesStr).'</strong>. Sertifikat Anda sedang dalam proses penerbitan.'
+  ];
+}
+
 $newCerts = array_filter($myRegs, fn($r) => 
   !empty($r['id_sertifikat']) && 
   strtotime($r['tanggal_terbit']) > strtotime('-7 days')
 );
 if (count($newCerts) > 0) {
+  $names = array_map(fn($r) => $r['nama_pelatihan'], $newCerts);
+  $namesStr = implode(', ', $names);
   $alerts[] = [
     'type' => 'success',
     'icon' => 'certificate',
-    'message' => 'Selamat! Anda memiliki <strong>'.count($newCerts).' sertifikat baru</strong>. <a href="sertifikat.php" class="alert-link">Lihat sertifikat</a>.'
+    'message' => '<strong>Selamat!</strong> Anda dinyatakan <strong>LULUS</strong> dan telah <strong>SELESAI</strong> mengikuti pelatihan: <strong>'.htmlspecialchars($namesStr).'</strong>. Sertifikat Anda telah terbit. <a href="sertifikat.php" class="alert-link">Lihat Sertifikat</a>'
   ];
 }
 
@@ -335,5 +396,41 @@ function getProgressStage($row) {
   <script src="../assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/app.min.js"></script>
   <script src="../assets/js/sidebarmenu.js"></script>
+  
+  <?php if (count($incomplete) > 0): ?>
+  <div class="modal fade" id="modalIncompleteFiles" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-danger">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title text-white"><i class="ti ti-alert-circle me-2"></i>Berkas Belum Lengkap</h5>
+        </div>
+        <div class="modal-body">
+          <p class="mb-3">Anda belum melengkapi dokumen persyaratan untuk pelatihan berikut:</p>
+          <ul class="list-group list-group-flush mb-3">
+            <?php foreach ($incomplete as $inc): ?>
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <?php echo htmlspecialchars($inc['nama_pelatihan']); ?>
+                <span class="badge bg-danger rounded-pill">Incomplete</span>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+          <div class="alert alert-warning small mb-0">
+            <i class="ti ti-info-circle me-1"></i> Mohon segera lengkapi berkas agar admin dapat memverifikasi pendaftaran Anda.
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Nanti Saja</button>
+          <a href="pendaftaran.php" class="btn btn-danger"><i class="ti ti-upload me-1"></i>Lengkapi Sekarang</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var myModal = new bootstrap.Modal(document.getElementById('modalIncompleteFiles'));
+      myModal.show();
+    });
+  </script>
+  <?php endif; ?>
 </body>
 </html>

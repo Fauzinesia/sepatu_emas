@@ -211,6 +211,21 @@ try {
                   <div class="alert alert-info" role="alert"><?php echo htmlspecialchars($notice); ?></div>
                 <?php } ?>
 
+                <div class="alert alert-primary shadow-sm mb-4" role="alert">
+                  <div class="d-flex align-items-center">
+                    <i class="ti ti-info-circle fs-5 me-3"></i>
+                    <div>
+                      <h6 class="alert-heading fw-bold mb-1">Informasi Kelengkapan Berkas</h6>
+                      <p class="mb-0 small">
+                        Agar pendaftaran Anda dapat segera diverifikasi oleh admin, mohon lengkapi berkas persyaratan berikut:
+                        <strong>KTP</strong>, <strong>Ijazah</strong>, dan <strong>Kartu Pencari Kerja</strong>.
+                        <br>Klik tombol <strong>"Kelola Berkas"</strong> pada kolom Aksi untuk mengunggah dokumen Anda.
+                        Pendaftaran dengan berkas tidak lengkap tidak akan diproses ke tahap selanjutnya.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="table-responsive">
                   <table class="table table-striped align-middle">
                     <thead>
@@ -227,7 +242,7 @@ try {
                     <tbody>
                       <?php if (empty($pendaftarans)) { ?>
                         <tr>
-                          <td colspan="6" class="text-center text-muted">Belum ada pendaftaran. Silakan mendaftar pada
+                          <td colspan="7" class="text-center text-muted">Belum ada pendaftaran. Silakan mendaftar pada
                             halaman pelatihan.</td>
                         </tr>
                       <?php } else {
@@ -250,7 +265,16 @@ try {
                               <span
                                 class="badge <?php echo $badge; ?> text-capitalize"><?php echo htmlspecialchars($p['status']); ?></span>
                             </td>
-                            <td><?php echo htmlspecialchars($p['keterangan'] ?: '-'); ?></td>
+                            <td>
+                              <?php if ($st === 'ditolak' && !empty($p['keterangan'])): ?>
+                                <div class="p-2 bg-danger-subtle text-danger rounded border border-danger small">
+                                  <i class="ti ti-alert-circle me-1"></i>
+                                  <?php echo htmlspecialchars($p['keterangan']); ?>
+                                </div>
+                              <?php else: ?>
+                                <?php echo htmlspecialchars($p['keterangan'] ?: '-'); ?>
+                              <?php endif; ?>
+                            </td>
                             <td>
                               <div class="d-flex flex-wrap gap-2">
                                 <?php
